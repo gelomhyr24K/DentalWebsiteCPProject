@@ -1,0 +1,21 @@
+after i add is
+
+try na natin connect sa database ang 
+Prescriptions
+Certificate
+File Attachments
+Notes
+Consents
+Appointments
+
+at ung sa dental sa system settings naseeset din
+sa database from system to datbase ganon din sa
+Prescriptions
+Certificate
+File Attachments
+Notes
+Consents
+Appointments
+
+para magkakasycnh na laaht bigyan moko ng supabase and system connection
+sql ok
