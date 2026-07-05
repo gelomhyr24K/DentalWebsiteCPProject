@@ -1,5 +1,6 @@
-﻿import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Edit, Printer, Search, Download, Calendar, DollarSign, FileText, Check, X, Paperclip } from 'lucide-react';
+import { loadActiveMasterDirectoryItems } from '../services/masterDirectoryService';
 
 interface TreatmentRecordsModuleProps {
   patientData: any;
@@ -30,6 +31,23 @@ export const TreatmentRecordsModule: React.FC<TreatmentRecordsModuleProps> = ({
   ]);
   const [checkoutPaidAmount, setCheckoutPaidAmount] = useState('0.00');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
+  const [paymentMethods, setPaymentMethods] = useState<string[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchMethods = async () => {
+      const result = await loadActiveMasterDirectoryItems('payment_methods');
+      if (isMounted) {
+        if (result.ok && result.data.length > 0) {
+          setPaymentMethods(result.data.map(item => item.name));
+        } else {
+          setPaymentMethods(['Cash', 'GCash', 'Card', 'Bank Transfer']);
+        }
+      }
+    };
+    void fetchMethods();
+    return () => { isMounted = false; };
+  }, []);
 
   const notesList = patientData.progressNotes || [];
   const attachmentsList = patientData.attachments || [];
@@ -564,9 +582,9 @@ export const TreatmentRecordsModule: React.FC<TreatmentRecordsModuleProps> = ({
                     onChange={e => setPaymentMethod(e.target.value)}
                     className="w-full px-3 py-2 border border-zinc-200 rounded-lg bg-white outline-none font-medium text-zinc-75 focus:ring-1 focus:ring-teal-500"
                   >
-                    <option value="Cash">Cash</option>
-                    <option value="GCash">GCash</option>
-                    <option value="Credit Card">Credit Card</option>
+                    {paymentMethods.map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
                   </select>
                 </div>
               </div>

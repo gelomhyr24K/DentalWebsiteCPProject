@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Plus, Trash2, Pin, Check } from 'lucide-react';
 
 interface ScratchpadProps {
@@ -20,8 +20,19 @@ export const ScratchpadModule: React.FC<ScratchpadProps> = ({
   const [activeColorIdx, setActiveColorIdx] = useState(0);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
 
   const notes = patientData.notes || [];
+  const itemsPerPage = 5;
+  const totalPages = Math.max(1, Math.ceil(notes.length / itemsPerPage));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * itemsPerPage;
+  const endIndex = Math.min(startIndex + itemsPerPage, notes.length);
+  const paginatedNotes = notes.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   const handleAddNote = (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,8 +146,9 @@ export const ScratchpadModule: React.FC<ScratchpadProps> = ({
         </div>
 
         {/* Notes Stickies Grid */}
-        <div className="md:col-span-3 grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-          {notes.map((note: any) => {
+        <div className="md:col-span-3 space-y-4">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          {paginatedNotes.map((note: any) => {
             const theme = STICKY_COLORS[note.colorIdx] || STICKY_COLORS[0];
             return (
               <div 
@@ -182,6 +194,39 @@ export const ScratchpadModule: React.FC<ScratchpadProps> = ({
           {notes.length === 0 && (
             <div className="col-span-full py-16 text-center text-zinc-400 italic text-xs border border-dashed border-zinc-200 bg-white rounded-2xl">
               No sticky notes written on the scratchpad yet. Create one to keep trace notes.
+            </div>
+          )}
+          </div>
+          {notes.length > 0 && (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-[10px] font-semibold text-zinc-500">
+                Showing {startIndex + 1}-{endIndex} of {notes.length} scratchpad notes
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                  disabled={safeCurrentPage <= 1}
+                  className="rounded-lg px-2.5 py-1 text-xs font-semibold text-zinc-500 hover:bg-zinc-100 disabled:opacity-40"
+                >
+                  &lt; Prev
+                </button>
+                {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`h-7 w-7 rounded-lg text-xs font-bold transition-colors ${page === safeCurrentPage ? 'bg-teal-600 text-white' : 'text-zinc-500 hover:bg-zinc-100'}`}
+                  >
+                    {page}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                  disabled={safeCurrentPage >= totalPages}
+                  className="rounded-lg px-2.5 py-1 text-xs font-semibold text-zinc-500 hover:bg-zinc-100 disabled:opacity-40"
+                >
+                  Next &gt;
+                </button>
+              </div>
             </div>
           )}
         </div>

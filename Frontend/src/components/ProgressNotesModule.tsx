@@ -16,6 +16,12 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
+import {
+  archiveProgressNoteRecallAppointment,
+  upsertProgressNoteRecallAppointment,
+} from '../services/clinicCalendarService';
+import { MasterSmartAutocomplete } from './MasterSmartAutocomplete';
+import { CommandPalette } from './CommandPalette';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -54,6 +60,7 @@ interface ProgressNotesModuleProps {
   setPatientData: (updater: any) => void;
   doctors: any[];
   saveToDatabase: () => Promise<void>;
+  patientId?: string | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -125,6 +132,7 @@ const ProgressNotesModule: React.FC<ProgressNotesModuleProps> = ({
   setPatientData,
   doctors,
   saveToDatabase,
+  patientId,
 }) => {
   /* ---- state ---- */
   const [searchQuery, setSearchQuery] = useState('');
@@ -142,6 +150,7 @@ const ProgressNotesModule: React.FC<ProgressNotesModuleProps> = ({
   const [recallReason, setRecallReason] = useState('');
   const [serviceRows, setServiceRows] = useState<ServiceRow[]>([]);
   const [clinicalRemarks, setClinicalRemarks] = useState('');
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [signatureDataUrl, setSignatureDataUrl] = useState('');
 
   // canvas
@@ -153,6 +162,34 @@ const ProgressNotesModule: React.FC<ProgressNotesModuleProps> = ({
 
   /* ---- derived data ---- */
   const notes: ProgressNote[] = patientData?.progressNotes || [];
+
+  const syncProgressNoteRecall = async (note: ProgressNote, draft: boolean) => {
+    if (!patientId) return;
+
+    try {
+      if (!draft && note.recallDate) {
+        await upsertProgressNoteRecallAppointment({
+          patientId,
+          progressNoteId: note.id,
+          linkedBillId: note.linkedBillId || null,
+          appointmentDate: note.recallDate,
+          startTime: note.recallTime || null,
+          title: note.recallReason || 'Recall Visit',
+          notes: `Recall linked to progress note ${note.id}${note.remarks ? ` - ${note.remarks}` : ''}`,
+          dentistName: note.dentistOnDuty || doctors[0]?.name || null,
+          treatmentTag: note.procedure || null,
+          metadata: {
+            progressNoteStatus: note.status,
+          },
+        });
+        return;
+      }
+
+      await archiveProgressNoteRecallAppointment(patientId, note.id);
+    } catch (error) {
+      console.error('Error syncing progress note recall appointment:', error);
+    }
+  };
 
   const filtered = notes.filter((n: ProgressNote) => {
     if (!searchQuery.trim()) return true;
@@ -340,7 +377,14 @@ const ProgressNotesModule: React.FC<ProgressNotesModuleProps> = ({
       ...prev,
       progressNotes: (prev.progressNotes || []).filter((n: ProgressNote) => n.id !== noteId),
     }));
-    setTimeout(() => saveToDatabase(), 50);
+    setTimeout(() => {
+      void (async () => {
+        await saveToDatabase();
+        if (patientId) {
+          await archiveProgressNoteRecallAppointment(patientId, noteId);
+        }
+      })();
+    }, 50);
   };
 
   /* ---- print note ---- */
@@ -375,7 +419,8 @@ const ProgressNotesModule: React.FC<ProgressNotesModuleProps> = ({
   const handleSave = (draft: boolean) => {
     const ts = Date.now();
     const noteId = editingNoteId || `NOTE-${ts}`;
-    const billId = `BILL-${ts}`;
+    const existingNote = notes.find((note) => note.id === editingNoteId);
+    const billId = editingNoteId ? existingNote?.linkedBillId || `BILL-${ts}` : `BILL-${ts}`;
 
     const noteObj: ProgressNote = {
       id: noteId,
@@ -437,27 +482,16 @@ const ProgressNotesModule: React.FC<ProgressNotesModuleProps> = ({
           source: 'progress_note',
         };
         updated.bills = [...(updated.bills || []), billObj];
-
-        // recall appointment
-        if (recallDate) {
-          const apptObj = {
-            id: `APPT-${ts}`,
-            date: recallDate,
-            time: recallTime,
-            title: recallReason || 'Recall Visit',
-            details: `Auto-generated recall from progress note ${noteId}`,
-            status: 'Scheduled',
-            type: 'Recall',
-          };
-          updated.appointments = [...(updated.appointments || []), apptObj];
-        }
       }
 
       return updated;
     });
 
     setTimeout(() => {
-      saveToDatabase();
+      void (async () => {
+        await saveToDatabase();
+        await syncProgressNoteRecall(noteObj, draft);
+      })();
     }, 50);
 
     setModalOpen(false);
@@ -664,13 +698,53 @@ const ProgressNotesModule: React.FC<ProgressNotesModuleProps> = ({
                       </td>
 
                       {/* THREE-DOT MENU */}
-                      <td className="px-3 py-3 text-center">
+                      <td className="relative px-3 py-3 text-center">
                         <button
-                          onClick={() => setActiveActionNote(note)}
+                          onClick={() => setActiveActionNote(activeActionNote?.id === note.id ? null : note)}
                           className="rounded-lg p-1 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-600"
+                          title="Note options"
                         >
                           <MoreVertical size={16} />
                         </button>
+                        {activeActionNote?.id === note.id && (
+                          <div className="absolute right-9 top-2 z-40 w-52 rounded-xl border border-zinc-200 bg-white p-2 text-left shadow-xl">
+                            <div className="border-b border-zinc-100 px-2 pb-2">
+                              <h4 className="text-xs font-bold text-zinc-900">Note Options</h4>
+                              <p className="mt-0.5 truncate text-[10px] font-mono text-zinc-400">{formatDisplayDate(note.date)}</p>
+                            </div>
+                            <div className="mt-1 flex flex-col gap-0.5">
+                              <button
+                                onClick={() => { openEditModal(note); setActiveActionNote(null); }}
+                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-semibold text-teal-600 transition-colors hover:bg-teal-50"
+                              >
+                                <CheckSquare className="h-4 w-4" />
+                                Edit Note
+                              </button>
+                              <button
+                                onClick={() => { duplicateNote(note); setActiveActionNote(null); }}
+                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-semibold text-zinc-700 transition-colors hover:bg-zinc-50"
+                              >
+                                <Copy className="h-4 w-4" />
+                                Duplicate
+                              </button>
+                              <button
+                                onClick={() => { printNote(note); setActiveActionNote(null); }}
+                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-semibold text-teal-600 transition-colors hover:bg-teal-50"
+                              >
+                                <Printer className="h-4 w-4" />
+                                Print
+                              </button>
+                              <div className="my-1 border-t border-zinc-100" />
+                              <button
+                                onClick={() => { deleteNote(note.id); setActiveActionNote(null); }}
+                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-semibold text-rose-500 transition-colors hover:bg-rose-50"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -866,12 +940,18 @@ const ProgressNotesModule: React.FC<ProgressNotesModuleProps> = ({
                             return (
                               <tr key={row.id}>
                                 <td className="px-3 py-2">
-                                  <input
-                                    type="text"
+                                  <MasterSmartAutocomplete
+                                    directoryType="services"
                                     placeholder="e.g. Oral Prophylaxis"
                                     value={row.procedure}
-                                    onChange={(e) => updateServiceRow(row.id, 'procedure', e.target.value)}
-                                    className="w-full rounded-lg border border-zinc-200 px-2.5 py-1.5 text-sm text-zinc-700 focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-400"
+                                    onChange={(value) => updateServiceRow(row.id, 'procedure', value)}
+                                    onSelect={(item) => {
+                                      updateServiceRow(row.id, 'procedure', item.name);
+                                      if (item.price !== null && item.price !== undefined) {
+                                        updateServiceRow(row.id, 'unitPrice', Number(item.price) || 0);
+                                      }
+                                    }}
+                                    inputClassName="w-full bg-white border border-zinc-200 hover:border-zinc-300 focus:border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-800 focus:outline-none transition-colors"
                                   />
                                 </td>
                                 <td className="px-3 py-2">
@@ -947,10 +1027,16 @@ const ProgressNotesModule: React.FC<ProgressNotesModuleProps> = ({
                       3. Remarks Notes (Type &lsquo;/&rsquo; for Templates)
                     </h4>
                   </div>
-                  <textarea
+                   <textarea
                     rows={5}
                     value={clinicalRemarks}
-                    onChange={(e) => setClinicalRemarks(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setClinicalRemarks(val);
+                      if (val.endsWith('/')) {
+                        setShowCommandPalette(true);
+                      }
+                    }}
                     placeholder="Type any detailed clinical comments, surgical reactions, or general treatment observations..."
                     className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 placeholder:text-zinc-400 focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-400"
                   />
@@ -1059,52 +1145,14 @@ const ProgressNotesModule: React.FC<ProgressNotesModuleProps> = ({
       {/* ============================================================ */}
       {/* SECTION 5 – ACTION OVERLAY MODAL                             */}
       {/* ============================================================ */}
-      {activeActionNote && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm p-4" onClick={() => setActiveActionNote(null)}>
-          <div className="w-full max-w-xs rounded-2xl bg-white p-4 shadow-2xl space-y-3" onClick={(e) => e.stopPropagation()}>
-            <div className="border-b border-zinc-100 pb-2">
-              <h4 className="text-sm font-bold text-zinc-900">Note Options</h4>
-              <p className="text-[10px] text-zinc-400 font-mono mt-0.5">{activeActionNote.id} ({formatDisplayDate(activeActionNote.date)})</p>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <button
-                onClick={() => { openEditModal(activeActionNote); setActiveActionNote(null); }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-teal-600 hover:bg-teal-50 transition-colors"
-              >
-                <CheckSquare className="h-4 w-4" />
-                Edit Note
-              </button>
-              <button
-                onClick={() => { duplicateNote(activeActionNote); setActiveActionNote(null); }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 transition-colors"
-              >
-                <Copy className="h-4 w-4" />
-                Duplicate
-              </button>
-              <button
-                onClick={() => { printNote(activeActionNote); setActiveActionNote(null); }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-teal-600 hover:bg-teal-50 transition-colors"
-              >
-                <Printer className="h-4 w-4" />
-                Print
-              </button>
-              <div className="my-1 border-t border-zinc-100" />
-              <button
-                onClick={() => { deleteNote(activeActionNote.id); setActiveActionNote(null); }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-rose-500 hover:bg-rose-50 transition-colors"
-              >
-                <Trash2 className="h-4 w-4" />
-                Delete
-              </button>
-            </div>
-            <button
-              onClick={() => setActiveActionNote(null)}
-              className="w-full rounded-xl border border-zinc-200 py-2 text-xs font-bold text-zinc-500 hover:bg-zinc-50 transition-colors"
-            >
-              CANCEL
-            </button>
-          </div>
-        </div>
+      {showCommandPalette && (
+        <CommandPalette
+          onSelect={(snippet: string) => {
+            setClinicalRemarks((prev) => prev.replace(/\/$/, '') + snippet);
+            setShowCommandPalette(false);
+          }}
+          onClose={() => setShowCommandPalette(false)}
+        />
       )}
     </div>
   );

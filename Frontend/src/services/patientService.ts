@@ -6,6 +6,8 @@ export type PatientListItem = {
   patient_last_name: string | null;
   patient_first_name: string | null;
   patient_data?: any;
+  favorite_statuses?: string[];
+  created_at?: string;
   updated_at: string;
   archived_at?: string | null;
 };
@@ -17,6 +19,8 @@ export type PatientRecordRow = {
   patient_first_name: string | null;
   patient_data: unknown;
   favorite_statuses: string[];
+  created_at?: string;
+  updated_at?: string;
 };
 
 export type SavePatientRecordInput = {
@@ -39,7 +43,7 @@ export const loadActivePatientRecords = async (): Promise<PatientListItem[]> => 
   const client = ensureSupabase();
   const { data, error } = await client
     .from('patient_records')
-    .select('id, record_name, patient_last_name, patient_first_name, patient_data, updated_at')
+    .select('id, record_name, patient_last_name, patient_first_name, patient_data, favorite_statuses, created_at, updated_at')
     .is('archived_at', null)
     .order('updated_at', { ascending: false });
 
@@ -51,7 +55,7 @@ export const loadArchivedPatientRecords = async (): Promise<PatientListItem[]> =
   const client = ensureSupabase();
   const { data, error } = await client
     .from('patient_records')
-    .select('id, record_name, patient_last_name, patient_first_name, patient_data, updated_at, archived_at')
+    .select('id, record_name, patient_last_name, patient_first_name, patient_data, favorite_statuses, created_at, updated_at, archived_at')
     .not('archived_at', 'is', null)
     .order('archived_at', { ascending: false });
 
@@ -63,7 +67,7 @@ export const loadPatientRecord = async (recordId?: string | null): Promise<Patie
   const client = ensureSupabase();
   const query = client
     .from('patient_records')
-    .select('id, record_name, patient_last_name, patient_first_name, patient_data, favorite_statuses, updated_at')
+    .select('id, record_name, patient_last_name, patient_first_name, patient_data, favorite_statuses, created_at, updated_at')
     .is('archived_at', null);
 
   const { data, error } = recordId
@@ -86,7 +90,7 @@ export const savePatientRecord = async (payload: SavePatientRecordInput): Promis
       patient_data: payload.patient_data,
       favorite_statuses: payload.favorite_statuses,
     })
-    .select('id, record_name, patient_last_name, patient_first_name, patient_data, favorite_statuses')
+    .select('id, record_name, patient_last_name, patient_first_name, patient_data, favorite_statuses, created_at, updated_at')
     .single();
 
   if (error) throw error;
@@ -111,6 +115,16 @@ export const restorePatientRecord = async (recordId: string): Promise<void> => {
     .update({ archived_at: null })
     .eq('id', recordId)
     .not('archived_at', 'is', null);
+
+  if (error) throw error;
+};
+
+export const deletePatientRecord = async (recordId: string): Promise<void> => {
+  const client = ensureSupabase();
+  const { error } = await client
+    .from('patient_records')
+    .delete()
+    .eq('id', recordId);
 
   if (error) throw error;
 };

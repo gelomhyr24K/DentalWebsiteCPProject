@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { CheckSquare, Plus, Trash2, CheckCircle } from 'lucide-react';
 
 interface FollowupProps {
@@ -12,8 +12,19 @@ export const FollowupModule: React.FC<FollowupProps> = ({
 }) => {
   const [newChecklistItem, setNewChecklistItem] = useState('');
   const [outreachLog, setOutreachLog] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
 
   const followups = patientData.followups || [];
+  const itemsPerPage = 5;
+  const totalPages = Math.max(1, Math.ceil(followups.length / itemsPerPage));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * itemsPerPage;
+  const endIndex = Math.min(startIndex + itemsPerPage, followups.length);
+  const paginatedFollowups = followups.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   const handleAddChecklistItem = (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,7 +115,7 @@ export const FollowupModule: React.FC<FollowupProps> = ({
           </div>
 
           <div className="space-y-4">
-            {followups.map((item: any) => (
+            {paginatedFollowups.map((item: any) => (
               <div key={item.id} className="border border-zinc-150 rounded-xl p-4 space-y-3 hover:shadow-sm transition-all bg-zinc-50/50">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3">
@@ -151,6 +162,38 @@ export const FollowupModule: React.FC<FollowupProps> = ({
               </div>
             )}
           </div>
+          {followups.length > 0 && (
+            <div className="flex flex-col gap-3 border-t border-zinc-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-[10px] font-semibold text-zinc-500">
+                Showing {startIndex + 1}-{endIndex} of {followups.length} follow-up items
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                  disabled={safeCurrentPage <= 1}
+                  className="rounded-lg px-2.5 py-1 text-xs font-semibold text-zinc-500 hover:bg-zinc-100 disabled:opacity-40"
+                >
+                  &lt; Prev
+                </button>
+                {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`h-7 w-7 rounded-lg text-xs font-bold transition-colors ${page === safeCurrentPage ? 'bg-teal-600 text-white' : 'text-zinc-500 hover:bg-zinc-100'}`}
+                  >
+                    {page}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                  disabled={safeCurrentPage >= totalPages}
+                  className="rounded-lg px-2.5 py-1 text-xs font-semibold text-zinc-500 hover:bg-zinc-100 disabled:opacity-40"
+                >
+                  Next &gt;
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

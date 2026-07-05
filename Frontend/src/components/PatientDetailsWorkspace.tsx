@@ -3,7 +3,7 @@ import {
   ArrowLeft, Edit3, Printer, Search, User, Plus, Trash2, 
   ChevronDown, X, RotateCcw, AlertTriangle, Check
 } from 'lucide-react';
-
+import { MasterSmartAutocomplete } from './MasterSmartAutocomplete';
 interface PatientDetailsWorkspaceProps {
   patientData: any;
   setPatientData: (updater: any) => void;
@@ -19,9 +19,10 @@ interface PatientDetailsWorkspaceProps {
   handleDownloadPDF: () => void;
   isDownloading: boolean;
   activeTab: string;
-  setActiveTab: (tab: string) => void;
+  setActiveTab: React.Dispatch<React.SetStateAction<string>>;
+  onOpenUpdateRecord: () => void;
   onBack: () => void;
-  children: React.ReactNode;
+  children: (tab: string, setActiveTab: (tab: string) => void) => React.ReactNode;
 }
 
 export const PatientDetailsWorkspace: React.FC<PatientDetailsWorkspaceProps> = ({
@@ -40,6 +41,7 @@ export const PatientDetailsWorkspace: React.FC<PatientDetailsWorkspaceProps> = (
   isDownloading,
   activeTab,
   setActiveTab,
+  onOpenUpdateRecord,
   onBack,
   children
 }) => {
@@ -162,8 +164,9 @@ export const PatientDetailsWorkspace: React.FC<PatientDetailsWorkspaceProps> = (
 
   // Tag Management Logic
   const handleAddTag = () => {
-    if (newTagInput.trim() && !tempTags.includes(newTagInput.trim())) {
-      setTempTags([...tempTags, newTagInput.trim()]);
+    const normalizedTag = newTagInput.trim();
+    if (normalizedTag && !tempTags.some((tag) => tag.toLowerCase() === normalizedTag.toLowerCase())) {
+      setTempTags([...tempTags, normalizedTag]);
       setNewTagInput('');
     }
   };
@@ -238,7 +241,7 @@ export const PatientDetailsWorkspace: React.FC<PatientDetailsWorkspaceProps> = (
         if (isMinor) alerts++; // pediatric recommendation
         return alerts;
       case 'charting':
-        return Object.keys(patientData.dentalChart?.teeth || {}).length;
+        return (patientData.dentalChartHistory || []).length;
       case 'prescriptions':
         return (patientData.prescriptions || []).length;
       case 'ledger':
@@ -261,6 +264,7 @@ export const PatientDetailsWorkspace: React.FC<PatientDetailsWorkspaceProps> = (
   };
 
   const CLINICAL_TABS = [
+    { id: 'form', label: 'Patient Info' },
     { id: 'progress_notes', label: 'Progress Notes' },
     { id: 'charting', label: 'Dental Charts' },
     { id: 'prescriptions', label: 'Prescriptions' },
@@ -271,8 +275,7 @@ export const PatientDetailsWorkspace: React.FC<PatientDetailsWorkspaceProps> = (
     { id: 'appointments', label: 'Appointments' },
     { id: 'scratchpad', label: 'Scratchpad Notes' },
     { id: 'followup', label: 'Follow Up Lists' },
-    { id: 'smart_support', label: 'Smart Support' },
-    { id: 'form', label: 'Patient Info' }
+    { id: 'smart_support', label: 'Smart Support' }
   ];
 
   return (
@@ -286,7 +289,7 @@ export const PatientDetailsWorkspace: React.FC<PatientDetailsWorkspaceProps> = (
             className="flex items-center gap-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold px-4 py-2 rounded-lg transition-all text-sm shadow-sm"
           >
             <ArrowLeft size={16} />
-            <span>Return</span>
+            <span>Back to List</span>
           </button>
           
           <div className="px-3.5 py-2 bg-zinc-100 rounded-lg text-xs font-bold font-mono text-zinc-600 shadow-sm border border-zinc-200/40">
@@ -306,7 +309,7 @@ export const PatientDetailsWorkspace: React.FC<PatientDetailsWorkspaceProps> = (
 
           {/* Update Record (Full Wizard Trigger) */}
           <button
-            onClick={() => setActiveTab('form')}
+            onClick={onOpenUpdateRecord}
             className="border border-zinc-200 text-zinc-800 hover:bg-zinc-50 px-4 py-2 rounded-lg font-semibold text-sm transition-all shadow-sm"
           >
             Update Record
@@ -459,14 +462,20 @@ export const PatientDetailsWorkspace: React.FC<PatientDetailsWorkspaceProps> = (
               Manage Tags
             </button>
           ) : (
-            <div className="flex items-center gap-2 ml-2">
-              <input
-                type="text"
+            <div className="flex items-center gap-2 ml-2 relative">
+              <MasterSmartAutocomplete
+                directoryType="tags"
                 value={newTagInput}
-                onChange={e => setNewTagInput(e.target.value)}
+                onChange={(val) => setNewTagInput(val)}
+                onSelect={(item) => {
+                  if (item.name && !tempTags.some((tag) => tag.toLowerCase() === item.name.toLowerCase())) {
+                    setTempTags([...tempTags, item.name]);
+                  }
+                  setNewTagInput('');
+                }}
                 placeholder="New tag..."
-                className="px-2 py-1 border border-zinc-200 rounded-[6px] outline-none text-xs focus:ring-1 focus:ring-teal-500 w-24"
-                onKeyDown={e => { if (e.key === 'Enter') handleAddTag(); }}
+                className="relative"
+                inputClassName="px-2 py-1 border border-zinc-200 rounded-[6px] outline-none text-xs focus:ring-1 focus:ring-teal-500 w-28 text-zinc-855 bg-white"
               />
               <button 
                 onClick={handleAddTag}
@@ -499,14 +508,16 @@ export const PatientDetailsWorkspace: React.FC<PatientDetailsWorkspaceProps> = (
           {CLINICAL_TABS.slice(0, 5).map((tab) => {
             const isActive = activeTab === tab.id;
             const count = getTabBadgeCount(tab.id);
+            const isPatientInfoTab = tab.id === 'form';
             return (
               <button
                 key={tab.id}
+                title={tab.label}
                 onClick={() => {
                   setActiveTab(tab.id);
                   setIsMoreTabsOpen(false);
                 }}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all relative ${
+                className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all relative ${
                   isActive
                     ? 'bg-teal-600 text-white shadow-sm'
                     : 'bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-50'
@@ -589,7 +600,7 @@ export const PatientDetailsWorkspace: React.FC<PatientDetailsWorkspaceProps> = (
 
       {/* ================= PART 6: ACTIVE WORKSPACE CONTENT ================= */}
       <div id={`section-${activeTab}`} className="mt-4">
-        {children}
+        {children(activeTab as any, setActiveTab)}
       </div>
 
       {/* ================= MODAL: QUICK UPDATE OVERLAY ================= */}

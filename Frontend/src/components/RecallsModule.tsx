@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Clock, Plus, Trash2, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface RecallsProps {
@@ -13,8 +13,19 @@ export const RecallsModule: React.FC<RecallsProps> = ({
   const [timeframe, setTimeframe] = useState('6 Months');
   const [logNotes, setLogNotes] = useState('');
   const [logStatus, setLogStatus] = useState('SMS Dispatched');
+  const [currentPage, setCurrentPage] = useState(1);
 
   const recalls = patientData.recalls || [];
+  const itemsPerPage = 5;
+  const totalPages = Math.max(1, Math.ceil(recalls.length / itemsPerPage));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * itemsPerPage;
+  const endIndex = Math.min(startIndex + itemsPerPage, recalls.length);
+  const paginatedRecalls = recalls.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   const handleAddRecall = (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,7 +140,7 @@ export const RecallsModule: React.FC<RecallsProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 font-medium">
-                {recalls.map((rec: any) => {
+                {paginatedRecalls.map((rec: any) => {
                   const isExpired = new Date(rec.targetDate) < new Date() && rec.status !== 'Scheduled';
                   
                   return (
@@ -175,6 +186,38 @@ export const RecallsModule: React.FC<RecallsProps> = ({
               </tbody>
             </table>
           </div>
+          {recalls.length > 0 && (
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-[10px] font-semibold text-zinc-500">
+                Showing {startIndex + 1}-{endIndex} of {recalls.length} recalls
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                  disabled={safeCurrentPage <= 1}
+                  className="rounded-lg px-2.5 py-1 text-xs font-semibold text-zinc-500 hover:bg-zinc-100 disabled:opacity-40"
+                >
+                  &lt; Prev
+                </button>
+                {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`h-7 w-7 rounded-lg text-xs font-bold transition-colors ${page === safeCurrentPage ? 'bg-teal-600 text-white' : 'text-zinc-500 hover:bg-zinc-100'}`}
+                  >
+                    {page}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                  disabled={safeCurrentPage >= totalPages}
+                  className="rounded-lg px-2.5 py-1 text-xs font-semibold text-zinc-500 hover:bg-zinc-100 disabled:opacity-40"
+                >
+                  Next &gt;
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

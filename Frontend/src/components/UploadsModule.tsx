@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { UploadCloud, X, RotateCw, ZoomIn, ZoomOut, Image as ImageIcon } from 'lucide-react';
 
 interface UploadsModuleProps {
@@ -14,12 +14,23 @@ export const UploadsModule: React.FC<UploadsModuleProps> = ({
   const [remarks, setRemarks] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [selectedImage, setSelectedImage] = useState<any>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   
   // Lightbox View Settings
   const [rotation, setRotation] = useState(0);
   const [scale, setScale] = useState(1);
 
   const attachments = patientData.attachments || [];
+  const itemsPerPage = 5;
+  const totalPages = Math.max(1, Math.ceil(attachments.length / itemsPerPage));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * itemsPerPage;
+  const endIndex = Math.min(startIndex + itemsPerPage, attachments.length);
+  const paginatedAttachments = attachments.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   const convertToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -149,7 +160,7 @@ export const UploadsModule: React.FC<UploadsModuleProps> = ({
         <div className="md:col-span-2 bg-white border border-zinc-200 rounded-2xl p-5 shadow-sm">
           <h4 className="font-bold text-zinc-800 text-sm font-display mb-4 uppercase">Media Library</h4>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            {attachments.map((img: any) => (
+            {paginatedAttachments.map((img: any) => (
               <div 
                 key={img.id} 
                 className="group relative border border-zinc-150 rounded-xl overflow-hidden shadow-sm bg-zinc-50 hover:shadow transition-all"
@@ -183,6 +194,38 @@ export const UploadsModule: React.FC<UploadsModuleProps> = ({
               </div>
             )}
           </div>
+          {attachments.length > 0 && (
+            <div className="mt-5 flex flex-col gap-3 border-t border-zinc-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-[10px] font-semibold text-zinc-500">
+                Showing {startIndex + 1}-{endIndex} of {attachments.length} media files
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                  disabled={safeCurrentPage <= 1}
+                  className="rounded-lg px-2.5 py-1 text-xs font-semibold text-zinc-500 hover:bg-zinc-100 disabled:opacity-40"
+                >
+                  &lt; Prev
+                </button>
+                {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`h-7 w-7 rounded-lg text-xs font-bold transition-colors ${page === safeCurrentPage ? 'bg-teal-600 text-white' : 'text-zinc-500 hover:bg-zinc-100'}`}
+                  >
+                    {page}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                  disabled={safeCurrentPage >= totalPages}
+                  className="rounded-lg px-2.5 py-1 text-xs font-semibold text-zinc-500 hover:bg-zinc-100 disabled:opacity-40"
+                >
+                  Next &gt;
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

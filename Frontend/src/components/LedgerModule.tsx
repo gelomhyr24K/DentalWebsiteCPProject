@@ -685,13 +685,67 @@ const LedgerModule: React.FC<LedgerModuleProps> = ({
                     </td>
 
                     {/* ACTION – three-dot menu */}
-                    <td className="px-3 py-3">
+                    <td className="relative px-3 py-3">
                       <button
-                        onClick={() => setActiveActionBill(bill)}
+                        onClick={() => setActiveActionBill(activeActionBill?.id === bill.id ? null : bill)}
                         className="rounded p-1 hover:bg-zinc-100"
+                        title="Bill options"
                       >
                         <MoreVertical className="h-4 w-4 text-zinc-500" />
                       </button>
+                      {activeActionBill?.id === bill.id && (
+                        <div className="absolute left-9 top-2 z-40 w-56 rounded-xl border border-zinc-200 bg-white p-2 text-left shadow-xl">
+                          <div className="border-b border-zinc-100 px-2 pb-2">
+                            <h4 className="text-xs font-bold text-zinc-900">Bill Options</h4>
+                            <p className="mt-0.5 truncate text-[10px] font-mono text-zinc-400">{formatDateDisplay(bill.date)}</p>
+                          </div>
+                          <div className="mt-1 flex flex-col gap-0.5">
+                            <button
+                              onClick={() => { openEditModal(bill); setActiveActionBill(null); }}
+                              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-semibold text-teal-600 transition-colors hover:bg-teal-50"
+                            >
+                              <Edit className="h-4 w-4" />
+                              Edit Bill
+                            </button>
+                            <button
+                              onClick={() => { duplicateBill(bill); setActiveActionBill(null); }}
+                              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-semibold text-zinc-700 transition-colors hover:bg-zinc-50"
+                            >
+                              <Copy className="h-4 w-4" />
+                              Duplicate Bill
+                            </button>
+                            <button
+                              onClick={() => { printBill(bill); setActiveActionBill(null); }}
+                              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-semibold text-teal-600 transition-colors hover:bg-teal-50"
+                            >
+                              <Printer className="h-4 w-4" />
+                              Print Record
+                            </button>
+                            <button
+                              onClick={() => { exportBillJSON(bill); setActiveActionBill(null); }}
+                              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-semibold text-teal-600 transition-colors hover:bg-teal-50"
+                            >
+                              <Download className="h-4 w-4" />
+                              Export JSON
+                            </button>
+                            <button
+                              onClick={() => { copyShareableLink(bill); setActiveActionBill(null); }}
+                              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-semibold text-teal-600 transition-colors hover:bg-teal-50"
+                            >
+                              <Link className="h-4 w-4" />
+                              Shareable Link
+                            </button>
+                            <div className="my-1 border-t border-zinc-100" />
+                            <button
+                              onClick={() => { deleteBill(bill.id); setActiveActionBill(null); }}
+                              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-semibold text-rose-500 transition-colors hover:bg-rose-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Delete / Archive
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </td>
 
                     {/* DATE with status badge */}
@@ -1119,67 +1173,6 @@ const LedgerModule: React.FC<LedgerModuleProps> = ({
       {/* ============================================================ */}
       {/* SECTION 5 – ACTION OVERLAY MODAL                             */}
       {/* ============================================================ */}
-      {activeActionBill && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm p-4" onClick={() => setActiveActionBill(null)}>
-          <div className="w-full max-w-xs rounded-2xl bg-white p-4 shadow-2xl space-y-3" onClick={(e) => e.stopPropagation()}>
-            <div className="border-b border-zinc-100 pb-2">
-              <h4 className="text-sm font-bold text-zinc-900">Bill Options</h4>
-              <p className="text-[10px] text-zinc-400 font-mono mt-0.5">{activeActionBill.id} ({formatDateDisplay(activeActionBill.date)})</p>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <button
-                onClick={() => { openEditModal(activeActionBill); setActiveActionBill(null); }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-teal-600 hover:bg-teal-50 transition-colors"
-              >
-                <Edit className="h-4 w-4" />
-                Edit Bill
-              </button>
-              <button
-                onClick={() => { duplicateBill(activeActionBill); setActiveActionBill(null); }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 transition-colors"
-              >
-                <Copy className="h-4 w-4" />
-                Duplicate Bill
-              </button>
-              <button
-                onClick={() => { printBill(activeActionBill); setActiveActionBill(null); }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-teal-600 hover:bg-teal-50 transition-colors"
-              >
-                <Printer className="h-4 w-4" />
-                Print Record
-              </button>
-              <button
-                onClick={() => { exportBillJSON(activeActionBill); setActiveActionBill(null); }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-teal-600 hover:bg-teal-50 transition-colors"
-              >
-                <Download className="h-4 w-4" />
-                Export JSON
-              </button>
-              <button
-                onClick={() => { copyShareableLink(activeActionBill); setActiveActionBill(null); }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-teal-600 hover:bg-teal-50 transition-colors"
-              >
-                <Link className="h-4 w-4" />
-                Shareable Link
-              </button>
-              <div className="my-1 border-t border-zinc-100" />
-              <button
-                onClick={() => { deleteBill(activeActionBill.id); setActiveActionBill(null); }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-rose-500 hover:bg-rose-50 transition-colors"
-              >
-                <Trash2 className="h-4 w-4" />
-                Delete / Archive
-              </button>
-            </div>
-            <button
-              onClick={() => setActiveActionBill(null)}
-              className="w-full rounded-xl border border-zinc-200 py-2 text-xs font-bold text-zinc-500 hover:bg-zinc-50 transition-colors"
-            >
-              CANCEL
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

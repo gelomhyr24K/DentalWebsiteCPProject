@@ -1,0 +1,8 @@
+{
+  "name": "PNJ DENTAL SYSTEM",
+  "description": "A digitalized patient dental record system for seamless clinical recording, medical history tracking, and patient management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

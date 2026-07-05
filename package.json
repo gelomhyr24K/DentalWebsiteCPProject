@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p Frontend/tsconfig.json && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "seed:demo-auth-users": "node Backend/scripts/seed-demo-auth-users.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.56.0",

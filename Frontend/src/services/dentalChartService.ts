@@ -77,6 +77,12 @@ export interface DentalChartRecord {
   last_edited_by: string | null;
   created_at: string;
   updated_at: string;
+  recall_date?: string | null;
+  medical_condition?: string | null;
+  medications?: string | null;
+  allergies?: string | null;
+  extraoral_exam?: string | null;
+  archived_at?: string | null;
 }
 
 export const DENTAL_CHART_TOOTH_IDS = [
@@ -128,22 +134,40 @@ export const createEmptyDentalChartData = (): DentalChartData => ({
   chartDate: new Date().toISOString().split('T')[0],
 });
 
-const normalizeToothEntry = (toothId: string, rawEntry: unknown): DentalChartToothEntry => {
+const normalizeSavedDentalTag = (val: any): any => {
+  if (!val) return null;
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object') {
+    if (val.code) {
+      return {
+        id: val.id || val.code,
+        code: val.code,
+        name: val.name || val.label || val.code,
+        label: val.label || val.name || val.code,
+        color: val.color || null,
+        legacyCode: val.legacyCode || val.code,
+        directoryType: val.directoryType || null
+      };
+    }
+  }
+  return null;
+};
+
+const normalizeToothEntry = (toothId: string, rawEntry: unknown): any => {
   const base = createDefaultToothChartEntry(toothId);
   if (!rawEntry || typeof rawEntry !== 'object') return base;
 
-  const typedEntry = rawEntry as Partial<DentalChartToothEntry> & {
-    surfaces?: Partial<Record<DentalChartSurfaceKey, DentalChartSurfaceValue>>;
-  };
+  const typedEntry = rawEntry as any;
 
   return {
     ...base,
     ...typedEntry,
     surfaces: { ...base.surfaces, ...(typedEntry.surfaces || {}) },
-    conditions: Array.isArray(typedEntry.conditions) ? typedEntry.conditions : [],
-    restorations: Array.isArray(typedEntry.restorations) ? typedEntry.restorations : [],
-    surgery: Array.isArray(typedEntry.surgery) ? typedEntry.surgery : [],
-    xray: Array.isArray(typedEntry.xray) ? typedEntry.xray : [],
+    status: Array.isArray(typedEntry.status) ? typedEntry.status.map(normalizeSavedDentalTag).filter(Boolean) : [],
+    conditions: Array.isArray(typedEntry.conditions) ? typedEntry.conditions.map(normalizeSavedDentalTag).filter(Boolean) : [],
+    restorations: Array.isArray(typedEntry.restorations) ? typedEntry.restorations.map(normalizeSavedDentalTag).filter(Boolean) : [],
+    surgery: Array.isArray(typedEntry.surgery) ? typedEntry.surgery.map(normalizeSavedDentalTag).filter(Boolean) : [],
+    xray: Array.isArray(typedEntry.xray) ? typedEntry.xray.map(normalizeSavedDentalTag).filter(Boolean) : [],
   };
 };
 
@@ -174,16 +198,39 @@ const ensureSupabase = () => {
   return supabase;
 };
 
-export const getDentalChartByPatientId = async (patientId: string): Promise<DentalChartRecord | null> => {
+export const getDentalChartsByPatientId = async (patientId: string): Promise<DentalChartRecord[]> => {
   if (!patientId?.trim()) {
-    throw new Error('Patient record ID is required to load a dental chart.');
+    throw new Error('Patient record ID is required to load dental charts.');
   }
 
   const client = ensureSupabase();
   const { data, error } = await client
     .from('dental_charts')
-    .select('id, patient_id, chart_data, summary, chart_mode, version, last_edited_by, created_at, updated_at')
+    .select('*')
     .eq('patient_id', patientId)
+    .is('archived_at', null)
+    .order('recall_date', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  if (!data) return [];
+
+  return data.map(record => ({
+    ...record,
+    chart_data: normalizeDentalChartData(record.chart_data),
+  })) as DentalChartRecord[];
+};
+
+export const getDentalChartById = async (chartId: string): Promise<DentalChartRecord | null> => {
+  if (!chartId?.trim()) {
+    throw new Error('Chart ID is required.');
+  }
+
+  const client = ensureSupabase();
+  const { data, error } = await client
+    .from('dental_charts')
+    .select('*')
+    .eq('id', chartId)
     .maybeSingle();
 
   if (error) throw error;
@@ -195,22 +242,69 @@ export const getDentalChartByPatientId = async (patientId: string): Promise<Dent
   } as DentalChartRecord;
 };
 
-export const createDentalChart = async (patientId: string, initialChartData?: Partial<DentalChartData>): Promise<DentalChartRecord> => {
+export const createDentalChartRecord = async (
+  patientId: string,
+  chartPayload: any,
+  options?: { source?: string }
+): Promise<DentalChartRecord> => {
   if (!patientId?.trim()) {
-    throw new Error('Patient record ID is required to create a dental chart.');
+    throw new Error('Patient record ID is required.');
+  }
+
+  // Guard: only allow explicit user-initiated saves
+  if (options?.source !== 'explicit-dental-chart-save') {
+    throw new Error(
+      'Blocked automatic dental chart insert. Dental charts can only be created from an explicit save action.'
+    );
   }
 
   const client = ensureSupabase();
-  const nextChartData = normalizeDentalChartData(initialChartData || createEmptyDentalChartData());
   const { data, error } = await client
     .from('dental_charts')
     .insert({
       patient_id: patientId,
-      chart_data: nextChartData,
-      summary: nextChartData.findings || null,
-      version: 1,
+      chart_data: chartPayload.chartData,
+      summary: chartPayload.summary || null,
+      recall_date: chartPayload.recallDate || new Date().toISOString().slice(0, 10),
+      medical_condition: chartPayload.medicalCondition || null,
+      medications: chartPayload.medications || null,
+      allergies: chartPayload.allergies || null,
+      extraoral_exam: chartPayload.extraoralExam || null
     })
-    .select('id, patient_id, chart_data, summary, chart_mode, version, last_edited_by, created_at, updated_at')
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  console.log('Only explicit dental chart save should insert row');
+  console.log('ALL CHARTS AFTER INSERT:', data);
+
+  return {
+    ...data,
+    chart_data: normalizeDentalChartData(data.chart_data),
+  } as DentalChartRecord;
+};
+
+export const updateDentalChartRecord = async (chartId: string, chartPayload: any): Promise<DentalChartRecord> => {
+  if (!chartId?.trim()) {
+    throw new Error('Chart ID is required for updating.');
+  }
+
+  const client = ensureSupabase();
+  const { data, error } = await client
+    .from('dental_charts')
+    .update({
+      chart_data: chartPayload.chartData,
+      summary: chartPayload.summary || null,
+      recall_date: chartPayload.recallDate,
+      medical_condition: chartPayload.medicalCondition || null,
+      medications: chartPayload.medications || null,
+      allergies: chartPayload.allergies || null,
+      extraoral_exam: chartPayload.extraoralExam || null,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', chartId)
+    .select()
     .single();
 
   if (error) throw error;
@@ -221,30 +315,45 @@ export const createDentalChart = async (patientId: string, initialChartData?: Pa
   } as DentalChartRecord;
 };
 
-export const upsertDentalChart = async (
+export const deleteDentalChartRecord = async (chartId: string): Promise<void> => {
+  if (!chartId?.trim()) throw new Error('Chart ID is required.');
+  
+  const client = ensureSupabase();
+  const { error } = await client
+    .from('dental_charts')
+    .update({ archived_at: new Date().toISOString() })
+    .eq('id', chartId);
+
+  if (error) throw error;
+};
+
+export const saveDentalChart = async (
   patientId: string,
-  chartData: Partial<DentalChartData>,
-  summary?: string | null,
-  chartMode?: string | null,
+  chartId: string,
+  chartPayload: any,
 ): Promise<DentalChartRecord> => {
-  if (!patientId?.trim()) {
-    throw new Error('Patient record ID is required to save a dental chart.');
+  if (!patientId?.trim() || !chartId?.trim()) {
+    throw new Error('Patient ID and Chart ID are required to save a dental chart.');
   }
 
   const client = ensureSupabase();
-  const normalizedChartData = normalizeDentalChartData(chartData);
   const { data, error } = await client
     .from('dental_charts')
     .upsert(
       {
+        id: chartId,
         patient_id: patientId,
-        chart_data: normalizedChartData,
-        summary: summary ?? normalizedChartData.findings ?? null,
-        chart_mode: chartMode ?? null,
+        chart_data: chartPayload.chartData,
+        summary: chartPayload.summary || null,
+        recall_date: chartPayload.recallDate || new Date().toISOString().slice(0, 10),
+        medical_condition: chartPayload.medicalCondition || null,
+        medications: chartPayload.medications || null,
+        allergies: chartPayload.allergies || null,
+        extraoral_exam: chartPayload.extraoralExam || null
       },
-      { onConflict: 'patient_id' },
+      { onConflict: 'id' },
     )
-    .select('id, patient_id, chart_data, summary, chart_mode, version, last_edited_by, created_at, updated_at')
+    .select()
     .single();
 
   if (error) throw error;
@@ -255,9 +364,7 @@ export const upsertDentalChart = async (
   } as DentalChartRecord;
 };
 
-export const saveDentalChart = upsertDentalChart;
-
 export const loadDentalChart = async (patientId: string): Promise<DentalChartData> => {
-  const record = await getDentalChartByPatientId(patientId);
-  return record?.chart_data || createEmptyDentalChartData();
+  const records = await getDentalChartsByPatientId(patientId);
+  return records.length > 0 ? records[0].chart_data : createEmptyDentalChartData();
 };
